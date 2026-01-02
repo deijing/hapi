@@ -307,4 +307,10 @@ export class ApiClient {
             `/api/sessions/${encodeURIComponent(sessionId)}/slash-commands`
         )
     }
+
+    async deleteSession(sessionId: string): Promise<void> {
+        await this.request(`/api/sessions/${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE'
+        })
+    }
 }

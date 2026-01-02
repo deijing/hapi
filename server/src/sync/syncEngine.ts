@@ -13,6 +13,7 @@ import type { Store } from '../store'
 import type { RpcRegistry } from '../socket/rpcRegistry'
 import type { SSEManager } from '../sse/sseManager'
 import { extractTodoWriteTodosFromMessageContent, TodosSchema, type TodoItem } from './todos'
+import { ActiveSessionError, SessionNotFoundError } from '../errors'
 
 export type ConnectionStatus = 'disconnected' | 'connected'
 
@@ -857,6 +858,37 @@ export class SyncEngine {
             commands?: Array<{ name: string; description?: string; source: 'builtin' | 'user' }>
             error?: string
         }
+    }
+
+    async deleteSession(sessionId: string, namespace: string): Promise<boolean> {
+        // 先验证 session 存在且 namespace 匹配
+        const session = this.sessions.get(sessionId)
+        if (!session || session.namespace !== namespace) {
+            throw new SessionNotFoundError()
+        }
+
+        // 禁止删除活跃会话，避免数据不一致
+        if (session.active) {
+            throw new ActiveSessionError()
+        }
+
+        // 从数据库中删除 (级联删除消息)
+        const deleted = this.store.deleteSession(sessionId, namespace)
+
+        if (!deleted) {
+            throw new SessionNotFoundError()
+        }
+
+        // DB 删除成功后，清理所有相关的内存缓存
+        this.sessions.delete(sessionId)
+        this.sessionMessages.delete(sessionId)
+        this.lastBroadcastAtBySessionId.delete(sessionId)
+        this.todoBackfillAttemptedSessionIds.delete(sessionId)
+
+        // 广播删除事件
+        this.emit({ type: 'session-removed', sessionId, namespace })
+
+        return true
     }
 
     private async sessionRpc(sessionId: string, method: string, params: unknown): Promise<unknown> {

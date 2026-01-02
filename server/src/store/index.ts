@@ -737,6 +737,13 @@ export class Store {
         return row
     }
 
+    deleteSession(id: string, namespace: string): boolean {
+        const result = this.db.prepare(
+            'DELETE FROM sessions WHERE id = ? AND namespace = ?'
+        ).run(id, namespace)
+        return result.changes > 0
+    }
+
     removeUser(platform: string, platformUserId: string): boolean {
         const result = this.db.prepare(
             'DELETE FROM users WHERE platform = ? AND platform_user_id = ?'

@@ -3,6 +3,7 @@ import { z } from 'zod'
 import type { SyncEngine, Session } from '../../sync/syncEngine'
 import type { WebAppEnv } from '../middleware/auth'
 import { requireSessionFromParam, requireSyncEngine } from './guards'
+import { ActiveSessionError, SessionNotFoundError } from '../../errors'
 
 type SessionSummaryMetadata = {
     name?: string
@@ -236,6 +237,38 @@ export function createSessionsRoutes(getSyncEngine: () => SyncEngine | null): Ho
                 success: false,
                 error: error instanceof Error ? error.message : 'Failed to list slash commands'
             })
+        }
+    })
+
+    app.delete('/sessions/:id', async (c) => {
+        const engine = requireSyncEngine(c, getSyncEngine)
+        if (engine instanceof Response) {
+            return engine
+        }
+
+        const sessionResult = requireSessionFromParam(c, engine)
+        if (sessionResult instanceof Response) {
+            return sessionResult
+        }
+
+        const namespace = c.get('namespace')
+
+        try {
+            await engine.deleteSession(sessionResult.sessionId, namespace)
+            return c.json({ ok: true })
+        } catch (error) {
+            // 使用类型检查而不是字符串匹配
+            if (error instanceof ActiveSessionError) {
+                return c.json({ error: 'Cannot delete active session. Please stop the session first.' }, 409)
+            }
+
+            if (error instanceof SessionNotFoundError) {
+                return c.json({ error: 'Session not found' }, 404)
+            }
+
+            // 其他错误：避免泄露内部信息，记录到服务端日志
+            console.error('Failed to delete session:', error)
+            return c.json({ error: 'Failed to delete session' }, 500)
         }
     })
 

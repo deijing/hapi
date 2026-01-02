@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { SessionSummary } from '@/types/api'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 type SessionGroup = {
     directory: string
@@ -113,6 +114,27 @@ function ChevronIcon(props: { className?: string; collapsed?: boolean }) {
     )
 }
 
+function TrashIcon(props: { className?: string }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={props.className}
+        >
+            <path d="M3 6h18" />
+            <path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" />
+            <path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
+        </svg>
+    )
+}
+
 function getSessionTitle(session: SessionSummary): string {
     if (session.metadata?.name) {
         return session.metadata.name
@@ -160,77 +182,105 @@ function formatRelativeTime(value: number): string | null {
 function SessionItem(props: {
     session: SessionSummary
     onSelect: (sessionId: string) => void
+    onDelete?: (sessionId: string) => void
     showPath?: boolean
+    isDeleting?: boolean
 }) {
-    const { session: s, onSelect, showPath = true } = props
+    const { session: s, onSelect, onDelete, showPath = true, isDeleting = false } = props
+    const isActive = s.active
+    const canDelete = Boolean(onDelete) && !isActive && !isDeleting
+
     return (
-        <button
-            type="button"
-            onClick={() => onSelect(s.id)}
-            className="session-list-item flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-link)]"
-        >
-            <div className="flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        <span
-                            className={`h-2 w-2 rounded-full ${s.active ? 'bg-[var(--app-badge-success-text)]' : 'bg-[var(--app-hint)]'}`}
-                        />
-                    </span>
-                    <div className="truncate text-sm font-medium">
-                        {getSessionTitle(s)}
+        <div className="session-list-item flex w-full items-stretch gap-0 border-transparent focus-within:border-[var(--app-link)] transition-colors">
+            <button
+                type="button"
+                onClick={() => onSelect(s.id)}
+                className="flex-1 flex flex-col gap-1.5 px-3 py-3 text-left transition-colors focus-visible:outline-none"
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                        <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                            <span
+                                className={`h-2 w-2 rounded-full ${s.active ? 'bg-[var(--app-badge-success-text)]' : 'bg-[var(--app-hint)]'}`}
+                            />
+                        </span>
+                        <div className="truncate text-sm font-medium">
+                            {getSessionTitle(s)}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 text-xs">
+                        {(() => {
+                            const progress = getTodoProgress(s)
+                            if (!progress) return null
+                            return (
+                                <span className="flex items-center gap-1 text-[var(--app-hint)]">
+                                    <BulbIcon className="h-3 w-3" />
+                                    {progress.completed}/{progress.total}
+                                </span>
+                            )
+                        })()}
+                        {s.pendingRequestsCount > 0 ? (
+                            <span className="text-[var(--app-badge-warning-text)]">
+                                pending {s.pendingRequestsCount}
+                            </span>
+                        ) : null}
+                        <span className="text-[var(--app-hint)]">
+                            {formatRelativeTime(s.updatedAt)}
+                        </span>
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 text-xs">
-                    {(() => {
-                        const progress = getTodoProgress(s)
-                        if (!progress) return null
-                        return (
-                            <span className="flex items-center gap-1 text-[var(--app-hint)]">
-                                <BulbIcon className="h-3 w-3" />
-                                {progress.completed}/{progress.total}
-                            </span>
-                        )
-                    })()}
-                    {s.pendingRequestsCount > 0 ? (
-                        <span className="text-[var(--app-badge-warning-text)]">
-                            pending {s.pendingRequestsCount}
-                        </span>
-                    ) : null}
-                    <span className="text-[var(--app-hint)]">
-                        {formatRelativeTime(s.updatedAt)}
-                    </span>
-                </div>
-            </div>
-            {showPath ? (
-                <div className="truncate text-xs text-[var(--app-hint)]">
-                    {s.metadata?.path ?? s.id}
-                </div>
-            ) : null}
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
-                <span className="inline-flex items-center gap-2">
-                    <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
-                        ❖
-                    </span>
-                    {getAgentLabel(s)}
-                </span>
-                <span>model: {getModelLabel(s)}</span>
-                {s.metadata?.worktree?.branch ? (
-                    <span>worktree: {s.metadata.worktree.branch}</span>
+                {showPath ? (
+                    <div className="truncate text-xs text-[var(--app-hint)]">
+                        {s.metadata?.path ?? s.id}
+                    </div>
                 ) : null}
-            </div>
-        </button>
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--app-hint)]">
+                    <span className="inline-flex items-center gap-2">
+                        <span className="flex h-4 w-4 items-center justify-center" aria-hidden="true">
+                            ❖
+                        </span>
+                        {getAgentLabel(s)}
+                    </span>
+                    <span>model: {getModelLabel(s)}</span>
+                    {s.metadata?.worktree?.branch ? (
+                        <span>worktree: {s.metadata.worktree.branch}</span>
+                    ) : null}
+                </div>
+            </button>
+            <button
+                type="button"
+                onClick={(e) => {
+                    e.stopPropagation()
+                    if (canDelete) {
+                        onDelete(s.id)
+                    }
+                }}
+                disabled={!canDelete}
+                className={`flex items-center px-3 transition-colors focus-visible:outline-none ${
+                    canDelete
+                        ? 'text-[var(--app-hint)] hover:text-red-500 focus-visible:text-red-500'
+                        : 'text-[var(--app-hint)]/30 cursor-not-allowed'
+                }`}
+                title={isActive ? 'Cannot delete active session' : isDeleting ? 'Deleting...' : 'Delete session'}
+            >
+                <TrashIcon className="h-4 w-4" />
+            </button>
+        </div>
     )
 }
 
 export function SessionList(props: {
     sessions: SessionSummary[]
     onSelect: (sessionId: string) => void
+    onDelete?: (sessionId: string) => void
     onNewSession: () => void
     onRefresh: () => void
     isLoading: boolean
     renderHeader?: boolean
+    deletingSessionId?: string | null
+    deleteError?: string | null
 }) {
-    const { renderHeader = true } = props
+    const { renderHeader = true, deletingSessionId = null, deleteError = null } = props
     const groups = useMemo(
         () => groupSessionsByDirectory(props.sessions),
         [props.sessions]
@@ -238,6 +288,9 @@ export function SessionList(props: {
     const [collapseOverrides, setCollapseOverrides] = useState<Map<string, boolean>>(
         () => new Map()
     )
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+    const [sessionToDelete, setSessionToDelete] = useState<{ id: string; title: string } | null>(null)
+
     const isGroupCollapsed = (group: SessionGroup): boolean => {
         const override = collapseOverrides.get(group.directory)
         if (override !== undefined) return override
@@ -250,6 +303,37 @@ export function SessionList(props: {
             next.set(directory, !isCollapsed)
             return next
         })
+    }
+
+    const handleDeleteClick = (sessionId: string) => {
+        const session = props.sessions.find(s => s.id === sessionId)
+        if (!session) return
+        setSessionToDelete({
+            id: sessionId,
+            title: getSessionTitle(session)
+        })
+        setDeleteDialogOpen(true)
+    }
+
+    const handleConfirmDelete = () => {
+        if (sessionToDelete && props.onDelete) {
+            props.onDelete(sessionToDelete.id)
+        }
+        setDeleteDialogOpen(false)
+        setSessionToDelete(null)
+    }
+
+    const handleCancelDelete = () => {
+        setDeleteDialogOpen(false)
+        setSessionToDelete(null)
+    }
+
+    const handleDialogOpenChange = (open: boolean) => {
+        setDeleteDialogOpen(open)
+        // 对话框关闭时清理状态
+        if (!open) {
+            setSessionToDelete(null)
+        }
     }
 
     useEffect(() => {
@@ -286,6 +370,12 @@ export function SessionList(props: {
                 </div>
             ) : null}
 
+            {deleteError ? (
+                <div className="mx-3 my-2 p-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <div className="text-sm text-red-600">{deleteError}</div>
+                </div>
+            ) : null}
+
             <div className="flex flex-col">
                 {groups.map((group) => {
                     const isCollapsed = isGroupCollapsed(group)
@@ -316,7 +406,9 @@ export function SessionList(props: {
                                             key={s.id}
                                             session={s}
                                             onSelect={props.onSelect}
+                                            onDelete={handleDeleteClick}
                                             showPath={false}
+                                            isDeleting={deletingSessionId === s.id}
                                         />
                                     ))}
                                 </div>
@@ -325,6 +417,36 @@ export function SessionList(props: {
                     )
                 })}
             </div>
+
+            <Dialog open={deleteDialogOpen} onOpenChange={handleDialogOpenChange}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Session</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete the session "{sessionToDelete?.title}"?
+                            This action cannot be undone and will permanently delete all messages.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end gap-3 mt-4">
+                        <button
+                            type="button"
+                            onClick={handleCancelDelete}
+                            disabled={deletingSessionId !== null}
+                            className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--app-secondary-bg)] hover:bg-[var(--app-secondary-bg)]/80 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            onClick={handleConfirmDelete}
+                            disabled={deletingSessionId !== null}
+                            className="px-4 py-2 rounded-lg text-sm font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {deletingSessionId ? 'Deleting...' : 'Delete'}
+                        </button>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

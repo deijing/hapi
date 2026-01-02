@@ -22,6 +22,7 @@ import { useSession } from '@/hooks/queries/useSession'
 import { useSessions } from '@/hooks/queries/useSessions'
 import { useSlashCommands } from '@/hooks/queries/useSlashCommands'
 import { useSendMessage } from '@/hooks/mutations/useSendMessage'
+import { useDeleteSession } from '@/hooks/mutations/useDeleteSession'
 import { queryKeys } from '@/lib/query-keys'
 import FilesPage from '@/routes/sessions/files'
 import FilePage from '@/routes/sessions/file'
@@ -70,10 +71,15 @@ function SessionsPage() {
     const { api } = useAppContext()
     const navigate = useNavigate()
     const { sessions, isLoading, error, refetch } = useSessions(api)
+    const deleteMutation = useDeleteSession(api)
 
     const handleRefresh = useCallback(() => {
         void refetch()
     }, [refetch])
+
+    const handleDelete = useCallback((sessionId: string) => {
+        deleteMutation.mutate(sessionId)
+    }, [deleteMutation])
 
     const projectCount = new Set(sessions.map(s => s.metadata?.path ?? 'Other')).size
 
@@ -106,10 +112,19 @@ function SessionsPage() {
                         to: '/sessions/$sessionId',
                         params: { sessionId },
                     })}
+                    onDelete={handleDelete}
                     onNewSession={() => navigate({ to: '/sessions/new' })}
                     onRefresh={handleRefresh}
                     isLoading={isLoading}
                     renderHeader={false}
+                    deletingSessionId={deleteMutation.isPending ? deleteMutation.variables : null}
+                    deleteError={
+                        deleteMutation.error instanceof Error
+                            ? deleteMutation.error.message
+                            : deleteMutation.error
+                                ? String(deleteMutation.error)
+                                : null
+                    }
                 />
             </div>
         </div>
